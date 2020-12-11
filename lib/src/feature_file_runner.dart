@@ -7,6 +7,7 @@ import './hooks/hook.dart';
 import './reporters/reporter.dart';
 import './configuration.dart';
 import './gherkin/exceptions/step_not_defined_error.dart';
+import './gherkin/exceptions/gherkin_exception.dart';
 import './gherkin/expressions/tag_expression.dart';
 import './gherkin/runnables/background.dart';
 import './gherkin/runnables/debug_information.dart';
@@ -54,9 +55,7 @@ class FeatureFileRunner {
           feature.debug,
           feature.tags.isNotEmpty
               ? feature.tags
-                  .map((t) => t.tags
-                      .map((c) => Tag(c, t.debug.lineNumber, t.isInherited))
-                      .toList())
+                  .map((t) => t.tags.map((c) => Tag(c, t.debug.lineNumber, t.isInherited)).toList())
                   .reduce((a, b) => a..addAll(b))
                   .toList()
               : Iterable<Tag>.empty().toList(),
@@ -70,8 +69,7 @@ class FeatureFileRunner {
 
       for (final scenario in feature.scenarios) {
         if (_canRunScenario(_config.tagExpression, scenario)) {
-          haveAllScenariosPassed &=
-              await _runScenarioInZone(scenario, feature.background);
+          haveAllScenariosPassed &= await _runScenarioInZone(scenario, feature.background);
         } else {
           await _log(
             "Ignoring scenario '${scenario.name}' as tag expression '${_config.tagExpression}' not satisfied",
@@ -123,10 +121,7 @@ class FeatureFileRunner {
         : _tagExpressionEvaluator.evaluate(
             tagExpression,
             scenario.tags.isNotEmpty
-                ? scenario.tags
-                    .map((t) => t.tags.toList())
-                    .reduce((a, b) => a..addAll(b))
-                    .toList()
+                ? scenario.tags.map((t) => t.tags.toList()).reduce((a, b) => a..addAll(b)).toList()
                 : Iterable<String>.empty().toList(),
           );
   }
@@ -174,9 +169,7 @@ class FeatureFileRunner {
     var scenarioPassed = true;
     final tags = scenario.tags.isNotEmpty
         ? scenario.tags
-            .map((t) => t.tags
-                .map((tag) => Tag(tag, t.debug.lineNumber, t.isInherited))
-                .toList())
+            .map((t) => t.tags.map((tag) => Tag(tag, t.debug.lineNumber, t.isInherited)).toList())
             .reduce((a, b) => a..addAll(b))
             .toList()
         : Iterable<Tag>.empty();
@@ -208,9 +201,8 @@ class FeatureFileRunner {
           scenario.debug,
           scenario.tags.isNotEmpty
               ? scenario.tags
-                  .map((t) => t.tags
-                      .map((tag) => Tag(tag, t.debug.lineNumber, t.isInherited))
-                      .toList())
+                  .map((t) =>
+                      t.tags.map((tag) => Tag(tag, t.debug.lineNumber, t.isInherited)).toList())
                   .reduce((a, b) => a..addAll(b))
                   .toList()
               : Iterable<Tag>.empty().toList(),
@@ -219,40 +211,43 @@ class FeatureFileRunner {
 
       if (background != null) {
         await _log(
-          "Running background steps for scenario '${scenario.name}'",
+          "Skipping background steps '${scenario.name}'",
           scenario.debug,
           MessageLevel.info,
         );
-        for (var step in background.steps) {
-          final result = await _runStep(
-            step,
-            world,
-            attachmentManager,
-            !scenarioPassed,
-          );
+        // for (var step in background.steps) {
+        //   final result = await _runStep(
+        //     step,
+        //     world,
+        //     attachmentManager,
+        //     !scenarioPassed,
+        //   );
+        //   scenarioPassed = result.result == StepExecutionResult.pass;
+        //   if (!_canContinueScenario(result)) {
+        //     scenarioPassed = false;
+        //     await _log(
+        //       "Background step '${step.name}' did not pass, all remaining steps will be skipped",
+        //       step.debug,
+        //       MessageLevel.warning,
+        //     );
+        //   }
+        // }
+      }
+
+      for (var step in scenario.steps) {
+        try {
+          final result = await _runStep(step, world, attachmentManager, !scenarioPassed);
           scenarioPassed = result.result == StepExecutionResult.pass;
           if (!_canContinueScenario(result)) {
             scenarioPassed = false;
             await _log(
-              "Background step '${step.name}' did not pass, all remaining steps will be skipped",
+              "Step '${step.name}' did not pass, all remaining steps will be skipped",
               step.debug,
               MessageLevel.warning,
             );
           }
-        }
-      }
-
-      for (var step in scenario.steps) {
-        final result =
-            await _runStep(step, world, attachmentManager, !scenarioPassed);
-        scenarioPassed = result.result == StepExecutionResult.pass;
-        if (!_canContinueScenario(result)) {
-          scenarioPassed = false;
-          await _log(
-            "Step '${step.name}' did not pass, all remaining steps will be skipped",
-            step.debug,
-            MessageLevel.warning,
-          );
+        } catch (GherkinStepNotDefinedException) {
+          continue;
         }
       }
     } catch (e, st) {
@@ -305,8 +300,7 @@ class FeatureFileRunner {
       step.name,
       step.debug,
       table: step.table,
-      multilineString:
-          step.multilineStrings.isNotEmpty ? step.multilineStrings.first : null,
+      multilineString: step.multilineStrings.isNotEmpty ? step.multilineStrings.first : null,
     ));
 
     if (skipExecution) {
@@ -356,9 +350,8 @@ class FeatureFileRunner {
   }
 
   ExecutableStep _matchStepToExecutableStep(StepRunnable step) {
-    final executable = _steps.firstWhere(
-        (s) => s.expression.isMatch(step.debug.lineText),
-        orElse: () => null);
+    final executable =
+        _steps.firstWhere((s) => s.expression.isMatch(step.debug.lineText), orElse: () => null);
     if (executable == null) {
       final message = """
       Step definition not found for text:

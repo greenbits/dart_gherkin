@@ -75,18 +75,14 @@ class GherkinRunner {
       try {
         await _reporter.onTestRunStarted();
         for (var featureFile in featureFiles) {
-          try {
-            final runner = FeatureFileRunner(
-              config,
-              _tagExpressionEvaluator,
-              _executableSteps,
-              _reporter,
-              _hook,
-            );
-            allFeaturesPassed &= await runner.run(featureFile);
-          } catch (GherkinStepNotDefinedException) {
-            continue;
-          }
+          final runner = FeatureFileRunner(
+            config,
+            _tagExpressionEvaluator,
+            _executableSteps,
+            _reporter,
+            _hook,
+          );
+          allFeaturesPassed &= await runner.run(featureFile);
         }
       } finally {
         await _reporter.onTestRunFinished();
