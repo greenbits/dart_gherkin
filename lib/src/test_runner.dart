@@ -41,11 +41,10 @@ class GherkinRunner {
     var featureFiles = <FeatureFile>[];
     for (var glob in config.features) {
       for (var entity in glob.listSync()) {
-        await _reporter.message(
-            "Found feature file '${entity.path}'", MessageLevel.verbose);
+        await _reporter.message("Found feature file '${entity.path}'", MessageLevel.verbose);
         final contents = File(entity.path).readAsStringSync();
-        final featureFile = await _parser.parseFeatureFile(
-            contents, entity.path, _reporter, _languageService);
+        final featureFile =
+            await _parser.parseFeatureFile(contents, entity.path, _reporter, _languageService);
         featureFiles.add(featureFile);
       }
     }
@@ -76,14 +75,18 @@ class GherkinRunner {
       try {
         await _reporter.onTestRunStarted();
         for (var featureFile in featureFiles) {
-          final runner = FeatureFileRunner(
-            config,
-            _tagExpressionEvaluator,
-            _executableSteps,
-            _reporter,
-            _hook,
-          );
-          allFeaturesPassed &= await runner.run(featureFile);
+          try {
+            final runner = FeatureFileRunner(
+              config,
+              _tagExpressionEvaluator,
+              _executableSteps,
+              _reporter,
+              _hook,
+            );
+            allFeaturesPassed &= await runner.run(featureFile);
+          } catch (GherkinStepNotDefinedException) {
+            continue;
+          }
         }
       } finally {
         await _reporter.onTestRunFinished();
